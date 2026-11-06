@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>仁寿殿 · 360° 全景漫游</title>
+<style>
+  :root {
+    --gold: #d4af37;
+    --gold-soft: #c9a96a;
+    --gold-dim: #8a7340;
+    --dark: #07080c;
+    --dark-2: #0d1018;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--dark);
+    font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #e8e3d6;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+  }
+
+  #app {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  #scene {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Soft radial vignette overlay */
+  #vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,0.42) 100%);
+    z-index: 5;
+  }
+
+  /* Title chrome top-left */
+  #title {
+    position: absolute;
+    top: 26px;
+    left: 32px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #title .rule {
+    width: 120px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold) 0%, transparent 100%);
+    margin-bottom: 10px;
+  }
+  #title h1 {
+    font-family: "Kaiti", "STKaiti", "KaiTi", "楷体", serif;
+    font-size: 38px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--gold);
+    text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+    line-height: 1.1;
+  }
+  #title .sub {
+    margin-top: 6px;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: var(--gold-soft);
+    text-transform: uppercase;
+    opacity: 0.92;
+  }
+
+  /* Toolbar bottom center */
+  #toolbar {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(10, 12, 18, 0.55);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #toolbar button {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--gold-soft);
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 1px;
+    padding: 9px 18px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+  }
+  #toolbar button:hover {
+    background: rgba(212, 175, 55, 0.12);
+    color: var(--gold);
+  }
+  #toolbar button.active {
+    background: rgba(212, 175, 55, 0.22);
+    border-color: rgba(212, 175, 55, 0.6);
+    color: var(--gold);
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.25) inset;
+  }
+
+  /* Hint toast */
+  #hint {
+    position: absolute;
+    bottom: 96px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    padding: 9px 20px;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    background: rgba(8, 10, 16, 0.6);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: 20px;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+  }
+  #hint.show { opacity: 1; }
+
+  /* Loading screen */
+  #loader {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--dark);
+    transition: opacity 0.7s ease;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  #loader .spinner {
+    width: 42px;
+    height: 42px;
+    border: 2px solid rgba(212, 175, 55, 0.2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  #loader .text {
+    margin-top: 18px;
+    font-family: "Kaiti", "STKaiti", "KaiTi", serif;
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: var(--gold-soft);
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error box */
+  #error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100;
+    max-width: 80%;
+    padding: 18px 26px;
+    background: rgba(60, 8, 12, 0.92);
+    border: 1px solid #e04747;
+    border-radius: 10px;
+    color: #ffdede;
+    font-size: 14px;
+    line-height: 1.6;
+    text-align: center;
+    box-shadow: 0 4px 30px rgba(224, 71, 71, 0.35);
+  }
+  #error.hidden { display: none; }
+  #error strong { color: #ff8a8a; display: block; margin-bottom: 6px; }
+
+  /* Info hotspot marker */
+  .hotspot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-top: -20px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    background: rgba(10, 12, 18, 0.55);
+    color: var(--gold);
+    font-size: 19px;
+    font-weight: 700;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 18;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, background 0.2s;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .hotspot:hover {
+    transform: scale(1.12);
+    background: rgba(212, 175, 55, 0.22);
+  }
+  .hotspot::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 50%;
+    border: 1px solid var(--gold);
+    opacity: 0.6;
+    animation: pulse 2.2s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(0.85); opacity: 0.7; }
+    100% { transform: scale(1.65); opacity: 0; }
+  }
+  .hotspot.hidden { display: none; }
+
+  /* Info panel */
+  .info-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    background: rgba(5, 6, 10, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .info-backdrop.show { display: flex; }
+  .info-card {
+    width: 100%;
+    max-width: 540px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: linear-gradient(160deg, rgba(20, 22, 30, 0.97), rgba(10, 12, 18, 0.97));
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    border-radius: 14px;
+    padding: 28px 30px 26px;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,175,55,0.1) inset;
+    position: relative;
+  }
+  .info-card h2 {
+    font-family: "Kaiti", "STKaiti", "KaiTi", "楷体", serif;
+    font-size: 26px;
+    color: var(--gold);
+    letter-spacing: 2px;
+    line-height: 1.3;
+    margin-bottom: 6px;
+  }
+  .info-card .info-sub {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: var(--gold-soft);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .info-card .rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold-dim), transparent);
+    margin-bottom: 16px;
+  }
+  .info-card p {
+    font-size: 14.5px;
+    line-height: 1.85;
+    color: #d8d3c7;
+  }
+  .info-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: transparent;
+    color: var(--gold-soft);
+    font-size: 22px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .info-close:hover { background: rgba(212,175,55,0.15); color: var(--gold); }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="text">仁寿殿 · 加载中</div>
+  </div>
+
+  <div id="title">
+    <div class="rule"></div>
+    <h1>仁寿殿</h1>
+    <div class="sub">360° 全景漫游 · HALL OF BENEVOLENCE &amp; LONGEVITY</div>
+  </div>
+
+  <div id="vignette"></div>
+
+  <div id="hint">拖动旋转视角 · 滚轮缩放</div>
+
+  <div id="toolbar">
+    <button id="btn-rotate" class="active">自动旋转</button>
+    <button id="btn-reset">重置视角</button>
+    <button id="btn-fullscreen">全屏</button>
+  </div>
+
+  <div id="error" class="hidden"><strong>加载失败</strong><span id="error-msg"></span></div>
+
+  <button id="hotspot-hall" class="hotspot hidden" aria-label="仁寿殿信息">i</button>
+
+  <div id="info-backdrop" class="info-backdrop">
+    <div class="info-card" role="dialog" aria-label="仁寿殿介绍">
+      <button id="info-close" class="info-close" aria-label="关闭">×</button>
+      <h2>Hall of Benevolence and Longevity 仁寿殿</h2>
+      <div class="info-sub">HALL OF BENEVOLENCE &amp; LONGEVITY</div>
+      <div class="rule"></div>
+      <p>This is the main hall of the Summer Palace's court area. Here emperors, and later Empress Dowager Cixi, received officials and handled affairs of state while staying at the palace. It was first built under Emperor Qianlong and was called the Hall of Diligent Government (勤政殿). Anglo-French troops burned it in 1860. When it was rebuilt under Cixi, it received its present name, which comes from the Confucian idea that a kind and benevolent ruler is blessed with a long life. Bronze statues and incense burners stand in the courtyard in front of the hall.</p>
+    </div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var errorBox = document.getElementById("error");
+  var errorMsg = document.getElementById("error-msg");
+
+  function fail(message) {
+    errorMsg.textContent = message;
+    errorBox.classList.remove("hidden");
+    var loader = document.getElementById("loader");
+    if (loader) loader.classList.add("hide");
+    throw new Error(message);
+  }
+
+  if (typeof THREE === "undefined") {
+    fail("three.min.js 加载失败，请确认文件存在。");
+    return;
+  }
+
+  var canvas = document.getElementById("scene");
+
+  // WebGL capability check
+  var webglAvailable = (function () {
+    try {
+      var c = document.createElement("canvas");
+      return !!(window.WebGLRenderingContext && (c.getContext("webgl") || c.getContext("experimental-webgl")));
+    } catch (e) { return false; }
+  })();
+  if (!webglAvailable) {
+    fail("当前浏览器不支持 WebGL，无法渲染全景。");
+    return;
+  }
+
+  // ---- Scene setup ----
+  var scene = new THREE.Scene();
+
+  var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1100);
+  camera.position.set(0, 0, 0);
+  camera.rotation.order = "YXZ";
+
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  // Inverted sphere panorama
+  var geometry = new THREE.SphereGeometry(500, 64, 40);
+  geometry.scale(-1, 1, 1);
+  var material = new THREE.MeshBasicMaterial();
+  var sphere = new THREE.Mesh(geometry, material);
+  scene.add(sphere);
+
+  // Hall position in world space. After geometry.scale(-1,1,1), the horizontal
+  // center of the equirectangular image (the main hall) maps to the -X direction;
+  // a small upward offset places the marker on the building's face.
+  var hallPoint = new THREE.Vector3(-1, 0.14, 0).normalize().multiplyScalar(490);
+  var hotspotEl = document.getElementById("hotspot-hall");
+
+  // ---- Control state ----
+  // After geometry.scale(-1,1,1), the horizontal center of the equirectangular
+  // image (u=0.5) maps to the -X direction. Camera default faces -Z (theta=0);
+  // theta=PI/2 turns the camera to face -X, framing the hall centered in the panorama.
+  var DEFAULT_THETA = Math.PI / 2;
+  var DEFAULT_PHI = 0;
+  var DEFAULT_FOV = 75;
+
+  var MIN_PHI = -80 * Math.PI / 180;
+  var MAX_PHI = 80 * Math.PI / 180;
+  var MIN_FOV = 32;
+  var MAX_FOV = 95;
+
+  var theta = DEFAULT_THETA;
+  var phi = DEFAULT_PHI;
+  var fov = DEFAULT_FOV;
+
+  var thetaTarget = DEFAULT_THETA;
+  var phiTarget = DEFAULT_PHI;
+  var fovTarget = DEFAULT_FOV;
+
+  var autoRotate = true;
+  var autoRotateSpeed = 0.12; // radians / second
+  var idleDelay = 4.0; // seconds before auto-rotate resumes
+  var lastInteraction = -1e9;
+
+  var ROT_SENS = 0.0025;
+
+  // ---- Texture loading ----
+  var loader = new THREE.TextureLoader();
+  loader.load(
+    "pano.jpg",
+    function (texture) {
+      texture.encoding = THREE.sRGBEncoding;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      material.map = texture;
+      material.needsUpdate = true;
+      document.getElementById("loader").classList.add("hide");
+      showHintOnce();
+      animate();
+    },
+    undefined,
+    function () {
+      fail("全景图 pano.jpg 加载失败。");
+    }
+  );
+
+  // ---- Pointer / touch controls ----
+  var pointers = new Map(); // pointerId -> {x, y}
+  var pinchStartDist = 0;
+  var pinchStartFov = DEFAULT_FOV;
+
+  function onPointerDown(e) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    canvas.setPointerCapture(e.pointerId);
+    if (pointers.size === 2) {
+      var pts = Array.from(pointers.values());
+      pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartFov = fovTarget;
+    }
+    markInteraction();
+  }
+
+  function onPointerMove(e) {
+    if (!pointers.has(e.pointerId)) return;
+    var prev = pointers.get(e.pointerId);
+    var cur = { x: e.clientX, y: e.clientY };
+    pointers.set(e.pointerId, cur);
+
+    if (pointers.size === 1) {
+      thetaTarget -= (cur.x - prev.x) * ROT_SENS;
+      phiTarget -= (cur.y - prev.y) * ROT_SENS;
+      phiTarget = Math.max(MIN_PHI, Math.min(MAX_PHI, phiTarget));
+      markInteraction();
+    } else if (pointers.size === 2) {
+      var pts = Array.from(pointers.values());
+      var dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStartDist > 0) {
+        var ratio = pinchStartDist / dist;
+        fovTarget = pinchStartFov * ratio;
+        fovTarget = Math.max(MIN_FOV, Math.min(MAX_FOV, fovTarget));
+      }
+      markInteraction();
+    }
+  }
+
+  function onPointerUp(e) {
+    pointers.delete(e.pointerId);
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  function onWheel(e) {
+    e.preventDefault();
+    fovTarget += e.deltaY * 0.05;
+    fovTarget = Math.max(MIN_FOV, Math.min(MAX_FOV, fovTarget));
+    markInteraction();
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+
+  function markInteraction() {
+    lastInteraction = performance.now() / 1000;
+  }
+
+  // ---- Toolbar ----
+  var btnRotate = document.getElementById("btn-rotate");
+  var btnReset = document.getElementById("btn-reset");
+  var btnFull = document.getElementById("btn-fullscreen");
+
+  btnRotate.addEventListener("click", function () {
+    autoRotate = !autoRotate;
+    btnRotate.classList.toggle("active", autoRotate);
+  });
+
+  btnReset.addEventListener("click", function () {
+    thetaTarget = DEFAULT_THETA;
+    phiTarget = DEFAULT_PHI;
+    fovTarget = DEFAULT_FOV;
+    markInteraction();
+  });
+
+  btnFull.addEventListener("click", function () {
+    var el = document.documentElement;
+    if (!document.fullscreenElement) {
+      (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+  });
+
+  // ---- Info hotspot / panel ----
+  var infoBackdrop = document.getElementById("info-backdrop");
+  var infoClose = document.getElementById("info-close");
+
+  hotspotEl.addEventListener("click", function (e) {
+    e.stopPropagation();
+    infoBackdrop.classList.add("show");
+    markInteraction();
+  });
+  infoClose.addEventListener("click", function () {
+    infoBackdrop.classList.remove("show");
+  });
+  infoBackdrop.addEventListener("click", function (e) {
+    if (e.target === infoBackdrop) infoBackdrop.classList.remove("show");
+  });
+
+  // ---- Hint toast ----
+  var hintShown = false;
+  function showHintOnce() {
+    if (hintShown) return;
+    hintShown = true;
+    var hint = document.getElementById("hint");
+    hint.classList.add("show");
+    setTimeout(function () { hint.classList.remove("show"); }, 3600);
+  }
+
+  // ---- Resize ----
+  window.addEventListener("resize", function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---- Animation loop ----
+  var clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var now = performance.now() / 1000;
+
+    // Auto-rotate after idle
+    if (autoRotate && (now - lastInteraction) > idleDelay) {
+      thetaTarget += autoRotateSpeed * dt;
+    }
+
+    // Damping
+    var k = 1 - Math.exp(-10 * dt);
+    theta += (thetaTarget - theta) * k;
+    phi += (phiTarget - phi) * k;
+    if (Math.abs(fov - fovTarget) > 0.001) {
+      fov += (fovTarget - fov) * k;
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+
+    camera.rotation.y = theta;
+    camera.rotation.x = phi;
+
+    // Update info hotspot screen position (hide when the hall is behind the camera)
+    if (hotspotEl) {
+      var camSpace = hallPoint.clone().applyMatrix4(camera.matrixWorldInverse);
+      if (camSpace.z < 0) {
+        var projected = hallPoint.clone().project(camera);
+        var sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+        var sy = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+        hotspotEl.style.transform = "translate(" + sx + "px, " + sy + "px)";
+        hotspotEl.classList.remove("hidden");
+      } else {
+        hotspotEl.classList.add("hidden");
+      }
+    }
+
+    renderer.render(scene, camera);
+  }
+})();
+</script>
+</body>
+</html>
