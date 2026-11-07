@@ -12,16 +12,3 @@ its supporting project files.
 
 Keep any accompanying folders alongside the HTML file so that
 relative links to images, scripts, and other assets remain valid.
-
-## Project Documentation
-The README will be expanded to document the tour’s features,
-controls, dependencies, and hosting requirements after the
-project files have been reviewed.
-
-## Credits
-Add the names of the project contributors and attribution for
-panoramic images, text, audio, and other third-party materials.
-
-## License
-Add the applicable license and any separate terms covering
-third-party content before distributing the project.
